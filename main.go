@@ -51,16 +51,21 @@ func main() {
 	c, err := ReadConfig(path)
 	CheckIfError(err)
 
-	// Support Github API Tokens
+	// Support Github and Bitbucket API Tokens
 	var auth *http.BasicAuth = nil
 
 	if len(c.ApiTokenFile) > 0 {
-		auth := &http.BasicAuth{
-			Username: "repo-scanner",
-		}
-		b, err := ioutil.ReadFile(c.ApiTokenFile)
-		CheckIfError(err)
-		auth.Password = strings.TrimSpace(string(b))
+        auth := &http.BasicAuth{
+            Username: "repo-scanner",
+        }
+        
+        if len(c.Username) > 0 {
+            c.Username = c.Username
+        }
+        
+        b, err := ioutil.ReadFile(c.ApiTokenFile)
+        CheckIfError(err)
+        auth.Password = strings.TrimSpace(string(b))
 	}
 
 	for _, repo := range c.Repositories {

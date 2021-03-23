@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	WorkBranch string `yaml:"work-branch"`
+    Username string `yaml:"username"`
 	ApiTokenFile string `yaml:api-token`
 	RequiredFiles []string `yaml:"required-files,flow"`
 	Repositories []string `yaml:",flow"`
