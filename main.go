@@ -9,17 +9,21 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 	"io/ioutil"
 	"os"
+    "log"
 	"strings"
+    "path"
 )
 
 // Info should be used to describe the example commands that are about to run.
 func Info(format string, args ...interface{}) {
 	fmt.Printf("\x1b[34;1m%s\x1b[0m\n", fmt.Sprintf(format, args...))
+    log.Printf("INFO: %s", fmt.Sprintf(format, args...))
 }
 
 // Warning should be used to display a warning
 func Warning(format string, args ...interface{}) {
 	fmt.Printf("\x1b[36;1m%s\x1b[0m\n", fmt.Sprintf(format, args...))
+    log.Printf("WARN: %s", fmt.Sprintf(format, args...))
 }
 
 func LogError(err error) {
@@ -28,6 +32,7 @@ func LogError(err error) {
 	}
 
 	fmt.Printf("\x1b[31;1m%s\x1b[0m\n", fmt.Sprintf("error: %s", err))
+    log.Printf("ERR:  %s", err)
 }
 
 // CheckIfError should be used to naively panics if an error is not nil.
@@ -41,14 +46,20 @@ func CheckIfError(err error) {
 }
 
 func main() {
-	var path = "scan-repos.yaml"
+	var configFile = "scan-repos.yaml"
 
 	if len(os.Args) > 1 {
-		path = os.Args[1]
+		configFile = os.Args[1]
 	}
 
-	c, err := ReadConfig(path)
+	c, err := ReadConfig(configFile)
 	CheckIfError(err)
+    
+    ext := path.Ext(configFile)
+    logfile := configFile[0:len(configFile)-len(ext)] + ".report"
+    file, err := os.OpenFile(logfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+    CheckIfError(err)
+    log.SetOutput(file)
 
 	// Support Github and Bitbucket API Tokens
 	var auth *http.BasicAuth = nil
