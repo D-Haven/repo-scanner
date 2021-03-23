@@ -12,7 +12,6 @@ import (
 	"strings"
 )
 
-
 // Info should be used to describe the example commands that are about to run.
 func Info(format string, args ...interface{}) {
 	fmt.Printf("\x1b[34;1m%s\x1b[0m\n", fmt.Sprintf(format, args...))
@@ -54,18 +53,18 @@ func main() {
 	// Support Github and Bitbucket API Tokens
 	var auth *http.BasicAuth = nil
 
-	if len(c.ApiTokenFile) > 0 {
-        auth := &http.BasicAuth{
-            Username: "repo-scanner",
-        }
-        
-        if len(c.Username) > 0 {
-            c.Username = c.Username
-        }
-        
-        b, err := ioutil.ReadFile(c.ApiTokenFile)
-        CheckIfError(err)
-        auth.Password = strings.TrimSpace(string(b))
+	if c.Auth != nil && strings.EqualFold(c.Auth.Mode, "basic") {
+		auth := &http.BasicAuth{
+			Username: "repo-scanner",
+		}
+
+		if len(c.Auth.Username) > 0 {
+			c.Auth.Username = c.Auth.Username
+		}
+
+		b, err := ioutil.ReadFile(c.Auth.ApiTokenFile)
+		CheckIfError(err)
+		auth.Password = strings.TrimSpace(string(b))
 	}
 
 	for _, repo := range c.Repositories {
@@ -73,11 +72,21 @@ func main() {
 		// branches and fetching the objects, exactly as:
 		Info("git clone --single-branch %s %s", c.WorkBranch, repo)
 
+		var transformedUrl = repo
+
+		if c.Auth != nil {
+			transformedUrl, err = c.Auth.Transform(repo)
+			if err != nil {
+				LogError(err)
+				continue
+			}
+		}
+
 		r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
-			URL:           repo,
+			URL:           transformedUrl,
 			ReferenceName: plumbing.ReferenceName(fmt.Sprintf("refs/heads/%s", c.WorkBranch)),
 			SingleBranch:  true,
-			Auth: auth,
+			Auth:          auth,
 		})
 		LogError(err)
 		if err != nil {
