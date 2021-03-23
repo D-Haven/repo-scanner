@@ -10,7 +10,9 @@ You control actions by specifying the YAML file that describes your environment.
 
 ```yaml
 work-branch: develop
-api-token: api.token
+auth:
+  mode: basic
+  api-token: api.token
 required-files:
   - LICENSE
   - CODE_OF_CONDUCT.md
@@ -33,7 +35,29 @@ repositories:
 Specifies the work branch where development happens.  In many organizations, it is `develop`, but others just use `main`
 or `master`.
 
-# `api-token`
+# `auth`
+
+Specifies the authentication to use if it's not a public API.  If authentication is specified, then the sub structure
+needs to be:
+
+```yaml
+auth:
+  mode: basic | url
+  username: username
+  api-token: path to token file
+```
+
+## `auth.mode`
+
+Mode must be "basic" for standard HTTP basic authentication, or "url" for url encoded authentication.  GitHub and GitLab
+don't care what the username is, so that is optional.  Bitbucket requires the username.
+
+## `auth.username`
+
+Optional field to specify the specific username.  This is required for Bitbucket, but other hosts don't require it.
+If not supplied, the default username of "repo-scanner" will be used.
+
+## `auth.api-token`
 
 Specifies the filename for your API Token when interacting with GitHub.  The file should only include the content of the
 API token.
