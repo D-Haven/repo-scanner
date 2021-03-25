@@ -1,28 +1,20 @@
 package main
 
 import (
-	"github.com/go-git/go-billy/v5"
-	"io/ioutil"
 	"strings"
 )
 
 type Constraint interface {
-	Evaluate(info billy.File) bool
+	Evaluate(filename string, b []byte) bool
 }
 
 type MultiConstraint struct {
 	Constraints []Constraint
 }
 
-func (mc *MultiConstraint) Evaluate(file billy.File) bool {
+func (mc *MultiConstraint) Evaluate(filename string, b []byte) bool {
 	for _, c := range mc.Constraints {
-		_, err := file.Seek(0, 0)
-		if err != nil {
-			Warning("✗ (%s) seek error: %s", file.Name(), err)
-			return false
-		}
-
-		isGood := c.Evaluate(file)
+		isGood := c.Evaluate(filename, b)
 		if !isGood {
 			return false
 		}
@@ -33,15 +25,9 @@ func (mc *MultiConstraint) Evaluate(file billy.File) bool {
 
 type MustNotBeEmpty struct{}
 
-func (_ *MustNotBeEmpty) Evaluate(file billy.File) bool {
-	b, err := ioutil.ReadAll(file)
-
-	if err != nil {
-		Warning("✗ (%s) read error: %s", file.Name(), err)
-		return false
-	}
+func (_ *MustNotBeEmpty) Evaluate(filename string, b []byte) bool {
 	if len(b) == 0 {
-		Warning("✗ is empty: %s", file.Name())
+		Warning("✗ is empty: %s", filename)
 
 		return false
 	}
@@ -53,19 +39,12 @@ type Contains struct {
 	Value string `yaml:"value"`
 }
 
-func (c *Contains) Evaluate(file billy.File) bool {
-	b, err := ioutil.ReadAll(file)
-
-	if err != nil {
-		Warning("✗ (%s) read error: %s", file.Name(), err)
-		return false
-	}
-
+func (c *Contains) Evaluate(filename string, b []byte) bool {
 	if strings.Contains(string(b), c.Value) {
 		return true
 	}
 
-	Warning("✗ (%s) does not contain text: %s", file.Name(), c.Value)
+	Warning("✗ (%s) does not contain text: %s", filename, c.Value)
 	return false
 }
 
@@ -73,16 +52,9 @@ type MustNotContain struct {
 	Value string `yaml:"value"`
 }
 
-func (mnc *MustNotContain) Evaluate(file billy.File) bool {
-	b, err := ioutil.ReadFile(file.Name())
-
-	if err != nil {
-		Warning("✗ (%s) read error: %s", file.Name(), err)
-		return false
-	}
-
+func (mnc *MustNotContain) Evaluate(filename string, b []byte) bool {
 	if strings.Contains(string(b), mnc.Value) {
-		Warning("✗ (%s) contains text: %s", file.Name(), mnc.Value)
+		Warning("✗ (%s) contains text: %s", filename, mnc.Value)
 		return false
 	}
 

@@ -118,11 +118,21 @@ func main() {
 				continue
 			}
 
-			isGood = isGood && test.Constraint().Evaluate(file)
+			b, err := ioutil.ReadAll(file)
+			if err != nil {
+				isGood = false
+				Warning("✗ (%s) read error: %s", file.Name(), err)
+				continue
+			}
+
 			err = file.Close()
 			if err != nil {
+				isGood = false
 				Warning("✗ can't close %s: %s", file.Name(), err)
+				continue
 			}
+
+			isGood = isGood && test.Constraint().Evaluate(file.Name(), b)
 		}
 
 		if isGood {
