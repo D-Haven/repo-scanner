@@ -15,11 +15,18 @@ type RepoAuth struct {
 	ApiTokenFile string `yaml:"api-token"`
 }
 
+type FileTest struct {
+	Name           string `yaml:"name"`
+	RequireContent bool   `yaml:"not-empty,omitempty"`
+	Includes       string `yaml:"includes,omitempty"`
+	Excludes       string `yaml:"excludes,omitempty"`
+}
+
 type Config struct {
-	WorkBranch    string    `yaml:"work-branch"`
-	Auth          *RepoAuth `yaml:"auth,omitempty"`
-	RequiredFiles []string  `yaml:"required-files,flow"`
-	Repositories  []string  `yaml:"repositories,flow"`
+	WorkBranch    string     `yaml:"work-branch"`
+	Auth          *RepoAuth  `yaml:"auth,omitempty"`
+	RequiredFiles []FileTest `yaml:"required-files,flow"`
+	Repositories  []string   `yaml:"repositories,flow"`
 }
 
 func ReadConfig(path string) (*Config, error) {
@@ -37,6 +44,24 @@ func ReadConfig(path string) (*Config, error) {
 	}
 
 	return &c, nil
+}
+
+func (test *FileTest) Constraint() *MultiConstraint {
+	constraint := MultiConstraint{}
+
+	if test.RequireContent {
+		constraint.Constraints = append(constraint.Constraints, &MustNotBeEmpty{})
+	}
+
+	if len(test.Includes) > 0 {
+		constraint.Constraints = append(constraint.Constraints, &Contains{Value: test.Includes})
+	}
+
+	if len(test.Excludes) > 0 {
+		constraint.Constraints = append(constraint.Constraints, &MustNotContain{Value: test.Excludes})
+	}
+
+	return &constraint
 }
 
 func (auth *RepoAuth) Transform(content string) (string, error) {

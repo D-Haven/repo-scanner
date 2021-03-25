@@ -70,7 +70,7 @@ func main() {
 		}
 
 		if len(c.Auth.Username) > 0 {
-			c.Auth.Username = c.Auth.Username
+			auth.Username = c.Auth.Username
 		}
 
 		b, err := ioutil.ReadFile(c.Auth.ApiTokenFile)
@@ -110,16 +110,14 @@ func main() {
 		var isGood = true
 
 		for _, file := range c.RequiredFiles {
-			info, err := wt.Filesystem.Stat(file)
+			info, err := wt.Filesystem.Stat(file.Name)
 			if err != nil {
 				isGood = false
-				Warning("✗ missing: %s", file)
+				Warning("✗ missing: %s", file.Name)
+				continue
 			}
 
-			if info != nil && info.Size() == 0 {
-				Warning("✗ empty: %s", file)
-				isGood = false
-			}
+			isGood = file.Constraint().Evaluate(info)
 		}
 
 		if isGood {
