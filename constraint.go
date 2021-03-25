@@ -1,20 +1,20 @@
 package main
 
 import (
+	"github.com/go-git/go-billy/v5"
 	"io/ioutil"
-	"os"
 	"strings"
 )
 
 type Constraint interface {
-	Evaluate(info os.FileInfo) bool
+	Evaluate(info billy.File) bool
 }
 
 type MultiConstraint struct {
 	Constraints []Constraint
 }
 
-func (mc *MultiConstraint) Evaluate(info os.FileInfo) bool {
+func (mc *MultiConstraint) Evaluate(info billy.File) bool {
 	for _, c := range mc.Constraints {
 		isGood := c.Evaluate(info)
 		if !isGood {
@@ -27,9 +27,15 @@ func (mc *MultiConstraint) Evaluate(info os.FileInfo) bool {
 
 type MustNotBeEmpty struct{}
 
-func (_ *MustNotBeEmpty) Evaluate(info os.FileInfo) bool {
-	if info.Size() == 0 {
-		Warning("✗ is empty: %s", info.Name())
+func (_ *MustNotBeEmpty) Evaluate(file billy.File) bool {
+	b, err := ioutil.ReadAll(file)
+
+	if err != nil {
+		Warning("✗ (%s) read error: %s", file.Name(), err)
+		return false
+	}
+	if len(b) == 0 {
+		Warning("✗ is empty: %s", file.Name())
 
 		return false
 	}
@@ -41,8 +47,8 @@ type Contains struct {
 	Value string `yaml:"value"`
 }
 
-func (c *Contains) Evaluate(info os.FileInfo) bool {
-	b, err := ioutil.ReadFile(info.Name())
+func (c *Contains) Evaluate(info billy.File) bool {
+	b, err := ioutil.ReadAll(info)
 
 	if err != nil {
 		Warning("✗ (%s) read error: %s", info.Name(), err)
@@ -61,7 +67,7 @@ type MustNotContain struct {
 	Value string `yaml:"value"`
 }
 
-func (mnc *MustNotContain) Evaluate(info os.FileInfo) bool {
+func (mnc *MustNotContain) Evaluate(info billy.File) bool {
 	b, err := ioutil.ReadFile(info.Name())
 
 	if err != nil {
