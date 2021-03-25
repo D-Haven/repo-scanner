@@ -14,9 +14,15 @@ type MultiConstraint struct {
 	Constraints []Constraint
 }
 
-func (mc *MultiConstraint) Evaluate(info billy.File) bool {
+func (mc *MultiConstraint) Evaluate(file billy.File) bool {
 	for _, c := range mc.Constraints {
-		isGood := c.Evaluate(info)
+		_, err := file.Seek(0, 0)
+		if err != nil {
+			Warning("✗ (%s) seek error: %s", file.Name(), err)
+			return false
+		}
+
+		isGood := c.Evaluate(file)
 		if !isGood {
 			return false
 		}
@@ -47,11 +53,11 @@ type Contains struct {
 	Value string `yaml:"value"`
 }
 
-func (c *Contains) Evaluate(info billy.File) bool {
-	b, err := ioutil.ReadAll(info)
+func (c *Contains) Evaluate(file billy.File) bool {
+	b, err := ioutil.ReadAll(file)
 
 	if err != nil {
-		Warning("✗ (%s) read error: %s", info.Name(), err)
+		Warning("✗ (%s) read error: %s", file.Name(), err)
 		return false
 	}
 
@@ -59,7 +65,7 @@ func (c *Contains) Evaluate(info billy.File) bool {
 		return true
 	}
 
-	Warning("✗ (%s) does not contain text: %s", info.Name(), c.Value)
+	Warning("✗ (%s) does not contain text: %s", file.Name(), c.Value)
 	return false
 }
 
@@ -67,16 +73,16 @@ type MustNotContain struct {
 	Value string `yaml:"value"`
 }
 
-func (mnc *MustNotContain) Evaluate(info billy.File) bool {
-	b, err := ioutil.ReadFile(info.Name())
+func (mnc *MustNotContain) Evaluate(file billy.File) bool {
+	b, err := ioutil.ReadFile(file.Name())
 
 	if err != nil {
-		Warning("✗ (%s) read error: %s", info.Name(), err)
+		Warning("✗ (%s) read error: %s", file.Name(), err)
 		return false
 	}
 
 	if strings.Contains(string(b), mnc.Value) {
-		Warning("✗ (%s) contains text: %s", info.Name(), mnc.Value)
+		Warning("✗ (%s) contains text: %s", file.Name(), mnc.Value)
 		return false
 	}
 

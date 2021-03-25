@@ -109,19 +109,19 @@ func main() {
 
 		var isGood = true
 
-		for _, file := range c.RequiredFiles {
-			info, err := wt.Filesystem.Open(file.Name)
+		for _, test := range c.RequiredFiles {
+			file, err := wt.Filesystem.Open(test.Name)
 
 			if err != nil {
 				isGood = false
-				Warning("✗ missing: %s", file.Name)
+				Warning("✗ missing: %s", test.Name)
 				continue
 			}
 
-			isGood = isGood && file.Constraint().Evaluate(info)
-			err = info.Close()
+			isGood = isGood && test.Constraint().Evaluate(file)
+			err = file.Close()
 			if err != nil {
-				Warning("✗ can't close %s: %s", info.Name(), err)
+				Warning("✗ can't close %s: %s", file.Name(), err)
 			}
 		}
 
