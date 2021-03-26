@@ -11,24 +11,12 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
 
 // Info should be used to describe the example commands that are about to run.
 func Info(format string, args ...interface{}) {
 	fmt.Printf("\x1b[34;1m%s\x1b[0m\n", fmt.Sprintf(format, args...))
-}
-
-// Warning should be used to display a warning
-func Warning(format string, args ...interface{}) {
-	fmt.Printf("\x1b[36;1m\t%s\x1b[0m\n", fmt.Sprintf(format, args...))
-}
-
-func LogError(err error) {
-	if err == nil {
-		return
-	}
-
-	fmt.Printf("\x1b[31;1m\t%s\x1b[0m\n", fmt.Sprintf("error: %s", err))
 }
 
 // CheckIfError should be used to naively panics if an error is not nil.
@@ -37,7 +25,7 @@ func CheckIfError(err error) {
 		return
 	}
 
-	LogError(err)
+	fmt.Printf("\x1b[31;1m\t%s\x1b[0m\n", fmt.Sprintf("error: %s", err))
 	os.Exit(1)
 }
 
@@ -68,99 +56,97 @@ func main() {
 		auth.Password = strings.TrimSpace(string(b))
 	}
 
+	var wg = sync.WaitGroup{}
+	wg.Add(len(c.Repositories))
 	report := Report{}
 
 	for _, repo := range c.Repositories {
-		// Clones the given repository in memory, creating the remote, the local
-		// branches and fetching the objects, exactly as:
-		Info("git clone --single-branch %s %s", c.WorkBranch, repo)
-		finding := Finding{
-			Repository: repo,
-		}
+		go func(repo string) {
+			defer wg.Done()
+			// Clones the given repository in memory, creating the remote, the local
+			// branches and fetching the objects, exactly as:
+			Info("git clone --single-branch %s %s", c.WorkBranch, repo)
+			finding := Finding{
+				Repository: repo,
+			}
 
-		var transformedUrl = repo
+			var transformedUrl = repo
 
-		if c.Auth != nil {
-			transformedUrl, err = c.Auth.Transform(repo)
+			if c.Auth != nil {
+				transformedUrl, err = c.Auth.Transform(repo)
+				if err != nil {
+					finding.Errors = append(finding.Errors, err.Error())
+					report.Findings = append(report.Findings, finding)
+					return
+				}
+			}
+
+			r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
+				URL:           transformedUrl,
+				ReferenceName: plumbing.ReferenceName(fmt.Sprintf("refs/heads/%s", c.WorkBranch)),
+				SingleBranch:  true,
+				Auth:          auth,
+			})
 			if err != nil {
-				LogError(err)
 				finding.Errors = append(finding.Errors, err.Error())
 				report.Findings = append(report.Findings, finding)
-				continue
+				return
 			}
-		}
 
-		r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
-			URL:           transformedUrl,
-			ReferenceName: plumbing.ReferenceName(fmt.Sprintf("refs/heads/%s", c.WorkBranch)),
-			SingleBranch:  true,
-			Auth:          auth,
-		})
-		if err != nil {
-			LogError(err)
-			finding.Errors = append(finding.Errors, err.Error())
-			report.Findings = append(report.Findings, finding)
-			continue
-		}
-
-		wt, err := r.Worktree()
-		if err != nil {
-			LogError(err)
-			finding.Errors = append(finding.Errors, err.Error())
-			report.Findings = append(report.Findings, finding)
-			continue
-		}
-
-		var isGood = true
-		for _, expected := range c.RequiredFiles {
-			file, err := wt.Filesystem.Open(expected.Name)
-
+			wt, err := r.Worktree()
 			if err != nil {
-				isGood = false
-				message := fmt.Sprintf("missing: %s", expected.Name)
-				Warning(message)
-				finding.Errors = append(finding.Errors, message)
+				finding.Errors = append(finding.Errors, err.Error())
 				report.Findings = append(report.Findings, finding)
-				continue
+				return
 			}
 
-			b, err := ioutil.ReadAll(file)
-			if err != nil {
-				isGood = false
-				message := fmt.Sprintf("(%s) read error: %s", file.Name(), err)
-				Warning(message)
-				finding.Errors = append(finding.Errors, message)
+			var isGood = true
+			for _, expected := range c.RequiredFiles {
+				file, err := wt.Filesystem.Open(expected.Name)
+
+				if err != nil {
+					isGood = false
+					message := fmt.Sprintf("missing: %s", expected.Name)
+					finding.Errors = append(finding.Errors, message)
+					continue
+				}
+
+				b, err := ioutil.ReadAll(file)
+				if err != nil {
+					isGood = false
+					message := fmt.Sprintf("(%s) read error: %s", file.Name(), err)
+					finding.Errors = append(finding.Errors, message)
+					continue
+				}
+
+				err = file.Close()
+				if err != nil {
+					isGood = false
+					message := fmt.Sprintf("can't close %s: %s", file.Name(), err)
+					finding.Errors = append(finding.Errors, message)
+					continue
+				}
+
+				passed, message := expected.Constraint().Evaluate(file.Name(), b)
+
+				if !passed {
+					finding.Errors = append(finding.Errors, message)
+				}
+
+				isGood = isGood && passed
+			}
+
+			if isGood {
+				report.Successful = append(report.Successful, repo)
+			} else {
 				report.Findings = append(report.Findings, finding)
-				continue
 			}
-
-			err = file.Close()
-			if err != nil {
-				isGood = false
-				message := fmt.Sprintf("can't close %s: %s", file.Name(), err)
-				Warning(message)
-				finding.Errors = append(finding.Errors, message)
-				report.Findings = append(report.Findings, finding)
-				continue
-			}
-
-			passed, message := expected.Constraint().Evaluate(file.Name(), b)
-
-			if !passed {
-				Warning(message)
-				finding.Errors = append(finding.Errors, message)
-			}
-
-			isGood = isGood && passed
-		}
-
-		if isGood {
-			Info("\tHas all required files")
-			report.Successful = append(report.Successful, repo)
-		} else {
-			report.Findings = append(report.Findings, finding)
-		}
+		}(repo)
 	}
+
+	wg.Wait()
+
+	Info("... Discovered %d findings, read the report for details", len(report.Findings))
 
 	ext := path.Ext(configFile)
 	reportFile := configFile[0:len(configFile)-len(ext)] + ".report"
