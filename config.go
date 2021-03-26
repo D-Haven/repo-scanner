@@ -25,6 +25,7 @@ type FileTest struct {
 type Config struct {
 	WorkBranch    string     `yaml:"work-branch"`
 	Auth          *RepoAuth  `yaml:"auth,omitempty"`
+	RejectedFiles []string   `yaml:"rejected-files,flow"`
 	RequiredFiles []FileTest `yaml:"required-files,flow"`
 	Repositories  []string   `yaml:"repositories,flow"`
 }
@@ -41,6 +42,11 @@ func ReadConfig(path string) (*Config, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Default the username to "repo-scanner" if auth is specified but username is not
+	if c.Auth != nil && len(c.Auth.Username) == 0 {
+		c.Auth.Username = "repo-scanner"
 	}
 
 	return &c, nil

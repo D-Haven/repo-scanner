@@ -101,6 +101,14 @@ func main() {
 			}
 
 			var isGood = true
+			for _, rejected := range c.RejectedFiles {
+				_, err := wt.Filesystem.Stat(rejected)
+
+				if err != nil {
+					finding.Errors = append(finding.Errors, fmt.Sprintf("has rejected file: %s", rejected))
+				}
+			}
+
 			for _, expected := range c.RequiredFiles {
 				file, err := wt.Filesystem.Open(expected.Name)
 
