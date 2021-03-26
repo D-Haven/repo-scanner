@@ -8,7 +8,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"strings"
@@ -17,13 +16,11 @@ import (
 // Info should be used to describe the example commands that are about to run.
 func Info(format string, args ...interface{}) {
 	fmt.Printf("\x1b[34;1m%s\x1b[0m\n", fmt.Sprintf(format, args...))
-	log.Printf("INFO: %s", fmt.Sprintf(format, args...))
 }
 
 // Warning should be used to display a warning
 func Warning(format string, args ...interface{}) {
-	fmt.Printf("\x1b[36;1m%s\x1b[0m\n", fmt.Sprintf(format, args...))
-	log.Printf("WARN: %s", fmt.Sprintf(format, args...))
+	fmt.Printf("\x1b[36;1m\t%s\x1b[0m\n", fmt.Sprintf(format, args...))
 }
 
 func LogError(err error) {
@@ -31,8 +28,7 @@ func LogError(err error) {
 		return
 	}
 
-	fmt.Printf("\x1b[31;1m%s\x1b[0m\n", fmt.Sprintf("error: %s", err))
-	log.Printf("ERR:  %s", err)
+	fmt.Printf("\x1b[31;1m\t%s\x1b[0m\n", fmt.Sprintf("error: %s", err))
 }
 
 // CheckIfError should be used to naively panics if an error is not nil.
@@ -55,12 +51,6 @@ func main() {
 	c, err := ReadConfig(configFile)
 	CheckIfError(err)
 
-	ext := path.Ext(configFile)
-	logfile := configFile[0:len(configFile)-len(ext)] + ".report"
-	file, err := os.OpenFile(logfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	CheckIfError(err)
-	log.SetOutput(file)
-
 	// Support Github and Bitbucket API Tokens
 	var auth *http.BasicAuth = nil
 
@@ -78,10 +68,15 @@ func main() {
 		auth.Password = strings.TrimSpace(string(b))
 	}
 
+	report := Report{}
+
 	for _, repo := range c.Repositories {
 		// Clones the given repository in memory, creating the remote, the local
 		// branches and fetching the objects, exactly as:
 		Info("git clone --single-branch %s %s", c.WorkBranch, repo)
+		finding := Finding{
+			Repository: repo,
+		}
 
 		var transformedUrl = repo
 
@@ -89,6 +84,8 @@ func main() {
 			transformedUrl, err = c.Auth.Transform(repo)
 			if err != nil {
 				LogError(err)
+				finding.Errors = append(finding.Errors, err.Error())
+				report.Findings = append(report.Findings, finding)
 				continue
 			}
 		}
@@ -99,44 +96,74 @@ func main() {
 			SingleBranch:  true,
 			Auth:          auth,
 		})
-		LogError(err)
 		if err != nil {
+			LogError(err)
+			finding.Errors = append(finding.Errors, err.Error())
+			report.Findings = append(report.Findings, finding)
 			continue
 		}
 
 		wt, err := r.Worktree()
-		CheckIfError(err)
+		if err != nil {
+			LogError(err)
+			finding.Errors = append(finding.Errors, err.Error())
+			report.Findings = append(report.Findings, finding)
+			continue
+		}
 
 		var isGood = true
-
-		for _, test := range c.RequiredFiles {
-			file, err := wt.Filesystem.Open(test.Name)
+		for _, expected := range c.RequiredFiles {
+			file, err := wt.Filesystem.Open(expected.Name)
 
 			if err != nil {
 				isGood = false
-				Warning("✗ missing: %s", test.Name)
+				message := fmt.Sprintf("missing: %s", expected.Name)
+				Warning(message)
+				finding.Errors = append(finding.Errors, message)
+				report.Findings = append(report.Findings, finding)
 				continue
 			}
 
 			b, err := ioutil.ReadAll(file)
 			if err != nil {
 				isGood = false
-				Warning("✗ (%s) read error: %s", file.Name(), err)
+				message := fmt.Sprintf("(%s) read error: %s", file.Name(), err)
+				Warning(message)
+				finding.Errors = append(finding.Errors, message)
+				report.Findings = append(report.Findings, finding)
 				continue
 			}
 
 			err = file.Close()
 			if err != nil {
 				isGood = false
-				Warning("✗ can't close %s: %s", file.Name(), err)
+				message := fmt.Sprintf("can't close %s: %s", file.Name(), err)
+				Warning(message)
+				finding.Errors = append(finding.Errors, message)
+				report.Findings = append(report.Findings, finding)
 				continue
 			}
 
-			isGood = isGood && test.Constraint().Evaluate(file.Name(), b)
+			passed, message := expected.Constraint().Evaluate(file.Name(), b)
+
+			if !passed {
+				Warning(message)
+				finding.Errors = append(finding.Errors, message)
+			}
+
+			isGood = isGood && passed
 		}
 
 		if isGood {
-			Info("✓ has all required files")
+			Info("\tHas all required files")
+			report.Successful = append(report.Successful, repo)
+		} else {
+			report.Findings = append(report.Findings, finding)
 		}
 	}
+
+	ext := path.Ext(configFile)
+	reportFile := configFile[0:len(configFile)-len(ext)] + ".report"
+	err = report.Write(reportFile)
+	CheckIfError(err)
 }
