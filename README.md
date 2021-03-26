@@ -1,5 +1,11 @@
 # repo-scanner
 
+This tool was born from a need to track build tool changes for a bunch of repositories.  Due to various reasons, a
+microservices based project I manage needed to convert from Maven builds to Gradle builds.  We had over 20 repositories
+that had varying levels of compliance, which made it more difficult to get them set up in our CI/CD pipelines.  This
+tool allows us to scan each of the repositories on demand and get a report based on the current `develop` baseline.  We
+also were able to police when a team marked the pipeline to skip tests.  I hope you'll be able to use it as well.
+
 In a microservices environment where there are many repositories, one for each service, I needed a way to test the
 consistency of the layout.  I created this tool primarily to enforce that the work branch is consistent, and the
 required files are present across all the repositories.  There's a lot this tool can be expanded to do in the future,
@@ -11,13 +17,20 @@ You control actions by specifying the YAML file that describes your environment.
 ```yaml
 work-branch: develop
 auth:
-  mode: basic
+  mode: url
   api-token: api.token
+rejected-files:
+  - LICENSE.txt
 required-files:
-  - LICENSE
-  - CODE_OF_CONDUCT.md
-  - CONTRIBUTING.md
-  - PULL_REQUEST_TEMPLATE.md
+  - name: LICENSE
+    not-empty: true
+    includes: Apache License
+  - name: CODE_OF_CONDUCT.md
+    not-empty: true
+  - name: CONTRIBUTING.md
+    not-empty: true
+  - name: PULL_REQUEST_TEMPLATE.md
+    not-empty: true
 repositories:
   - https://github.com/D-Haven/DHaven.Faux.git
   - https://github.com/D-Haven/spa-server.git
@@ -64,10 +77,42 @@ API token.
 
 **NOTE:** we are planning more authentication methods to support SSH connections and Bitbucket.  You can help out here!
 
+# `rejected-files`
+
+The list of files that should not exist in a repository.  Useful for migrating away from one build too suite to a new
+version.  There are no further validations, because the only criteria is that these files do not exist in the work
+branch.
+
 # `required-files`
 
-The list of files that must _exist_ and _have content_.  The tool will report a missing file if there is a zero byte
-file with that name.
+```yaml
+required-files:
+- name: LICENSE
+  not-empty: true
+  includes: Apache License
+  excludes: GNU GENERAL PUBLIC LICENSE
+```
+
+The list of files that must exist, and the further constraints we want to check.  Those constraints currently include
+ensuring the file contains content, that the file contains text, or that the file does not contain text.
+
+## `required-files.name`
+
+The name of the file that must exist
+
+## `required-files.not-empty`
+
+Flag to enforce the file contains something (i.e. not an empty file).
+
+## `required-files.includes`
+
+Text to ensure exists in the file.  Allows you to check your "Jenkinsfile" is using the build tool, etc.  Only one
+positive test allowed currently.
+
+## `required-files.excluds`
+
+Text to ensure does not exist in a file.  Allows you to check your "Jenkinsfile" is not skipping tests.  Only one
+negative test allowed currently.
 
 # `repositories`
 
