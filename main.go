@@ -100,38 +100,32 @@ func main() {
 				return
 			}
 
-			var isGood = true
 			for _, rejected := range c.RejectedFiles {
 				_, err := wt.Filesystem.Stat(rejected)
 
 				if err != nil {
 					finding.Errors = append(finding.Errors, fmt.Sprintf("has rejected file: %s", rejected))
-                    isGood = false
 				}
 			}
 
 			for _, expected := range c.RequiredFiles {
 				file, err := wt.Filesystem.Open(expected.Name)
-
 				if err != nil {
-					isGood = false
 					message := fmt.Sprintf("missing: %s", expected.Name)
 					finding.Errors = append(finding.Errors, message)
 					continue
 				}
+                defer func() {
+                    err = file.Close()
+                    if err != nil {
+                        message := fmt.Sprintf("can't close %s: %s", file.Name(), err)
+                        finding.Errors = append(finding.Errors, message)
+                    }
+                }()
 
 				b, err := ioutil.ReadAll(file)
 				if err != nil {
-					isGood = false
 					message := fmt.Sprintf("(%s) read error: %s", file.Name(), err)
-					finding.Errors = append(finding.Errors, message)
-					continue
-				}
-
-				err = file.Close()
-				if err != nil {
-					isGood = false
-					message := fmt.Sprintf("can't close %s: %s", file.Name(), err)
 					finding.Errors = append(finding.Errors, message)
 					continue
 				}
@@ -141,11 +135,9 @@ func main() {
 				if !passed {
 					finding.Errors = append(finding.Errors, message)
 				}
-
-				isGood = isGood && passed
 			}
 
-			if isGood {
+			if len(finding.Errors) == 0 {
 				report.Successful = append(report.Successful, repo)
 			} else {
 				report.Findings = append(report.Findings, finding)
