@@ -106,6 +106,7 @@ func main() {
 
 				if err != nil {
 					finding.Errors = append(finding.Errors, fmt.Sprintf("has rejected file: %s", rejected))
+                    isGood = false
 				}
 			}
 
