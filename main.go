@@ -103,7 +103,9 @@ func main() {
 			for _, rejected := range c.RejectedFiles {
 				_, err := wt.Filesystem.Stat(rejected)
 
-				if err != nil {
+				// If there is no error, then the file exists.
+				// Since these are rejected files, record the finding
+				if err == nil {
 					finding.Errors = append(finding.Errors, fmt.Sprintf("has rejected file: %s", rejected))
 				}
 			}
@@ -115,19 +117,17 @@ func main() {
 					finding.Errors = append(finding.Errors, message)
 					continue
 				}
-                defer func() {
-                    err = file.Close()
-                    if err != nil {
-                        message := fmt.Sprintf("can't close %s: %s", file.Name(), err)
-                        finding.Errors = append(finding.Errors, message)
-                    }
-                }()
 
 				b, err := ioutil.ReadAll(file)
 				if err != nil {
 					message := fmt.Sprintf("(%s) read error: %s", file.Name(), err)
 					finding.Errors = append(finding.Errors, message)
-					continue
+				}
+
+				err = file.Close()
+				if err != nil {
+					message := fmt.Sprintf("(%s) can't close: %s", file.Name(), err)
+					finding.Errors = append(finding.Errors, message)
 				}
 
 				passed, message := expected.Constraint().Evaluate(file.Name(), b)
